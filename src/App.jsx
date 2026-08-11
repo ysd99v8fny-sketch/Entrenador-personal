@@ -1,35 +1,68 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
+import Auth from './Auth'
+import Perfil from './Perfil'
 
 function App() {
-  const [conectado, setConectado] = useState(null)
-  const [numEjercicios, setNumEjercicios] = useState(null)
-  const [errorMsg, setErrorMsg] = useState(null)
+  const [session, setSession] = useState(undefined) // undefined = cargando, null = sin sesión
+  const [perfil, setPerfil] = useState(undefined)
 
   useEffect(() => {
-    supabase
-      .from('ejercicios')
-      .select('id, nombre')
-      .then(({ data, error }) => {
-        if (error) {
-          setConectado(false)
-          setErrorMsg(error.message)
-        } else {
-          setConectado(true)
-          setNumEjercicios(data.length)
-        }
-      })
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => listener.subscription.unsubscribe()
   }, [])
+
+  useEffect(() => {
+    if (session) {
+      cargarPerfil()
+    }
+  }, [session])
+
+  const cargarPerfil = async () => {
+    const { data } = await supabase
+      .from('usuarios')
+      .select('*')
+      .eq('auth_id', session.user.id)
+      .maybeSingle()
+    setPerfil(data)
+  }
+
+  const cerrarSesion = async () => {
+    await supabase.auth.signOut()
+    setPerfil(undefined)
+  }
+
+  if (session === undefined) {
+    return <p style={{ padding: '2rem', fontFamily: 'sans-serif' }}>Cargando...</p>
+  }
+
+  if (!session) {
+    return <Auth />
+  }
+
+  if (perfil === undefined) {
+    return <p style={{ padding: '2rem', fontFamily: 'sans-serif' }}>Cargando perfil...</p>
+  }
+
+  if (!perfil) {
+    return <Perfil session={session} onPerfilCreado={cargarPerfil} />
+  }
 
   return (
     <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1>App de Gimnasio</h1>
-      <p>
-        Estado de conexión a Supabase:{' '}
-        {conectado === null ? 'comprobando...' : conectado ? '✅ conectado' : '❌ error'}
-      </p>
-      {conectado && <p>Ejercicios cargados en la base de datos: {numEjercicios}</p>}
-      {errorMsg && <p style={{ color: 'red' }}>Detalle del error: {errorMsg}</p>}
+      <h1>Hola, {perfil.nombre} 👋</h1>
+      <p>Objetivo: {perfil.objetivo}</p>
+      <p>Nivel: {perfil.nivel}</p>
+      <button onClick={cerrarSesion} style={{ padding: '0.5rem 1rem', marginTop: '1rem' }}>
+        Cerrar sesión
+      </button>
     </div>
   )
 }
