@@ -6,6 +6,7 @@ function Perfil({ session, onPerfilCreado }) {
   const [edad, setEdad] = useState('')
   const [sexo, setSexo] = useState('masculino')
   const [alturaCm, setAlturaCm] = useState('')
+  const [pesoKg, setPesoKg] = useState('')
   const [nivel, setNivel] = useState('principiante')
   const [objetivo, setObjetivo] = useState('hipertrofia')
   const [error, setError] = useState(null)
@@ -16,18 +17,36 @@ function Perfil({ session, onPerfilCreado }) {
     setError(null)
     setCargando(true)
 
-    const { error } = await supabase.from('usuarios').insert({
-      auth_id: session.user.id,
-      nombre,
-      edad: parseInt(edad, 10),
-      sexo,
-      altura_cm: parseFloat(alturaCm),
-      nivel,
-      objetivo,
+    // 1. Crear el perfil en USUARIOS (datos que cambian poco)
+    const { data: usuarioCreado, error: errorUsuario } = await supabase
+      .from('usuarios')
+      .insert({
+        auth_id: session.user.id,
+        nombre,
+        edad: parseInt(edad, 10),
+        sexo,
+        altura_cm: parseFloat(alturaCm),
+        nivel,
+        objetivo,
+      })
+      .select()
+      .single()
+
+    if (errorUsuario) {
+      setError(errorUsuario.message)
+      setCargando(false)
+      return
+    }
+
+    // 2. Crear el primer registro de peso en MEDIDAS (esto cambia con el tiempo, por eso va aparte)
+    const { error: errorMedida } = await supabase.from('medidas').insert({
+      usuario_id: usuarioCreado.id,
+      peso_kg: parseFloat(pesoKg),
+      fecha: new Date().toISOString().split('T')[0],
     })
 
-    if (error) {
-      setError(error.message)
+    if (errorMedida) {
+      setError(errorMedida.message)
       setCargando(false)
     } else {
       onPerfilCreado()
@@ -69,6 +88,17 @@ function Perfil({ session, onPerfilCreado }) {
           required
           min={100}
           max={250}
+          style={{ padding: '0.5rem' }}
+        />
+        <input
+          type="number"
+          placeholder="Peso (kg)"
+          value={pesoKg}
+          onChange={(e) => setPesoKg(e.target.value)}
+          required
+          min={30}
+          max={300}
+          step={0.1}
           style={{ padding: '0.5rem' }}
         />
         <label>
